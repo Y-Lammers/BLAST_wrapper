@@ -82,8 +82,9 @@ def obtain_tax (code):
 	
 			# parse through the features and grap the taxon_id
 			sub = record.features
-			return [sub[0].qualifiers['db_xref'][0].split(':')[1],
-				sub[0].qualifiers['organism'][0]]
+			db_xref = [code.split(':')[1] for code in sub[0].qualifiers['db_xref'] if 'taxon' in code][0]
+			organism = sub[0].qualifiers['organism'][0]
+			return [db_xref, organism]
 		except:
 			count += 1
 	return taxon
@@ -94,11 +95,14 @@ def write_results (result, mode):
 	# ignore empty strings!
 	if result != '':
 	
-		csvfile = sys.stdout
-		if args.o != '-':
-			csvfile = open(args.o, mode)
-		writer = csv.writer(csvfile, delimiter = '\t',  quoting=csv.QUOTE_NONE)
-		writer.writerow(result)
+		try:
+			csvfile = sys.stdout
+			if args.o != '-':
+				csvfile = open(args.o, mode)
+			writer = csv.writer(csvfile, delimiter = '\t',  quoting=csv.QUOTE_NONE, lineterminator='\n')
+			writer.writerow(result)
+		except:
+			pass
 	
 
 def local_blast ():
@@ -112,27 +116,27 @@ def local_blast ():
 	if args.ba == 'blastn':
 		BLAST_handle = Popen(['blastn', '-query', args.i, '-out', temp_output, '-db', args.bd,
 					'-max_target_seqs', str(args.hs), '-num_threads', str(cores), '-outfmt',
-					'6 qseqid sseqid stitle sgi sacc pident length evalue bitscore staxids'],
+					'6 qseqid sseqid stitle sgi sacc pident length qlen evalue bitscore staxids'],
 					stdout=PIPE, stderr=PIPE)
 	elif args.ba == 'blastp':
 		BLAST_handle = Popen(['blastp', '-query', args.i, '-out', temp_output, '-db', args.bd,
 					'-max_target_seqs', str(args.hs), '-num_threads', str(cores), '-outfmt',
-					'6 qseqid sseqid stitle sgi sacc pident length evalue bitscore staxids'],
+					'6 qseqid sseqid stitle sgi sacc pident length qlen evalue bitscore staxids'],
 					stdout=PIPE, stderr=PIPE)
 	elif args.ba == 'blastx':
 		BLAST_handle = Popen(['blastx', '-query', args.i, '-out', temp_output, '-db', args.bd,
 					'-max_target_seqs', str(args.hs), '-num_threads', str(cores), '-outfmt',
-					'6 qseqid sseqid stitle sgi sacc pident length evalue bitscore staxids'],
+					'6 qseqid sseqid stitle sgi sacc pident length qlen evalue bitscore staxids'],
 					stdout=PIPE, stderr=PIPE)
 	elif args.ba == 'tblastn':
 		BLAST_handle = Popen(['tblastn', '-query', args.i, '-out', temp_output, '-db', args.bd,
 					'-max_target_seqs', str(args.hs), '-num_threads', str(cores), '-outfmt',
-					'6 qseqid sseqid stitle sgi sacc pident length evalue bitscore staxids'],
+					'6 qseqid sseqid stitle sgi sacc pident length qlen evalue bitscore staxids'],
 					stdout=PIPE, stderr=PIPE)
 	elif args.ba == 'tblastx':
 		BLAST_handle = Popen(['tblastx', '-query', args.i, '-out', temp_output, '-db', args.bd,
 					'-max_target_seqs', str(args.hs), '-num_threads', str(cores), '-outfmt',
-					'6 qseqid sseqid stitle sgi sacc pident length evalue bitscore staxids'],
+					'6 qseqid sseqid stitle sgi sacc pident length qlen evalue bitscore staxids'],
 					stdout=PIPE, stderr=PIPE)
 	else:
 		logging.critical('Invalid blast algorithm selected')
@@ -156,8 +160,12 @@ def parse_local_blast():
 
 	# parse through the output and format the data for filtering
 	for line in open(temp_output):
+		if '\"' in line: line = line.replace('\"','')
 		line = line.strip().split('\t')
-		line[1:3] = [' '.join(line[1:3])]
+		if line[2] != 'N/A' and line[2] != line[1]:
+			line[1:3] = [' '.join(line[1:3])]
+		else:
+			line[1:3] = [line[1]]
 		if ';' in line[-1]: line[-1] = line[-1].split(';')[0]
 		
 		# try to add the taxon id
@@ -206,6 +214,7 @@ def parse_online_blast (seq_list):
 				# calculate the %identity
 				identity = float(hsp.identities/(len(hsp.match)*0.01))
 
+
 				# grab the genbank number
 				gb_num = alignment.title.split('|')[1:4:2]
 				gb_num[1] = gb_num[1].split('.')[0]
@@ -218,16 +227,17 @@ def parse_online_blast (seq_list):
 					taxon = taxon_dic[gb_num[0]]
 
 				# pull all the results together and sent them to the filter function
-				filter_hits([str(blast_result.query), str(alignment.title), str(gb_num[0]),
-						str(gb_num[1]),	str(identity), str(len(hsp.query)), str(hsp.expect),
-						str(hsp.bits), taxon[0], taxon[1]])
+				filter_hits([str(blast_result.query), str(alignment.title), str(gb_num[0]), str(gb_num[1]),
+						str(identity), str(len(hsp.query)), str(blast_result.query_length),
+						str(hsp.expect), str(hsp.bits), taxon[0], taxon[1]])
 
 
 def filter_hits (blast):
 	
 	# filter the blast hits, based on the minimum
 	# identity, minimum coverage, e-value and the user blacklist
-	if float(blast[4]) >= args.mi and int(blast[5]) >= args.mc and float(blast[6]) <= args.me:
+	if float(blast[4]) >= args.mi and int(blast[5]) >= args.mc and float(blast[7]) <= args.me:
+		blast[6] = round((float(blast[5])/float(blast[6]))*100, 2)
 		results = blast
 		del results[3]
 
@@ -302,6 +312,7 @@ def main ():
 		'GI',
 		'% identity',
 		'Hit length',
+		'Hit % length',
 		'E-value',
 		'Bit score',
 		'Taxon ID',
