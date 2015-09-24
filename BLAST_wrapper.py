@@ -62,10 +62,11 @@ def parse_taxon ():
 	# open the taxonid file and return
 	# a dictionary with the taxonid's as key
 	# and the scientific names as values
-	taxon_dic = {}
+	taxon_dic = [{}, {}]
 	for taxon in open(args.tf):
 		taxon = taxon.strip().split('\t')
-		taxon_dic[taxon[0]] = taxon[1]
+		taxon_dic[0][taxon[0]] = taxon[1]
+		taxon_dic[1][taxon[1]] = taxon[0]
 	return taxon_dic
 
 	
@@ -168,11 +169,23 @@ def parse_local_blast():
 			line[1:3] = [line[1]]
 		if ';' in line[-1]: line[-1] = line[-1].split(';')[0]
 		
-		# try to add the taxon id
-		try:
-			line += [taxon_dic[line[-1]]]
-		except:
-			line += ['']
+		# BOLD species name exception
+		if 'BoLD' in args.bd and line[-1] == 'N/A':
+			name = line[1].split('|')[1].replace('_', ' ')
+			try:
+				if name in taxon_dic[1]:
+					line[-1] = taxon_dic[1][name]
+				else:
+					line[-1] = taxon_dic[1][name.split(' ')[0]]
+				line += [name]
+			except:
+				line += [name]
+		else:	
+			# try to add the taxon id
+			try:
+				line += [taxon_dic[0][line[-1]]]
+			except:
+				line += ['']
 
 		# send line away for filtering
 		filter_hits(line)
