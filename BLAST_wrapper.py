@@ -18,6 +18,8 @@ parser.add_argument('-o', '--output_file', metavar='output file', dest='o', type
 			help='results file in TSV format. if "-" is provided, output is to STDOUT', default='-')
 parser.add_argument('-ba', '--BLAST_algorithm', metavar='algorithm', dest='ba', type=str, 
 			help='BLAST algorithm to use (optional, default=blastn)', default='blastn')
+parser.add_argument('-task', metavar='task', dest='tk', type=str,
+			help='BLAST task to use blastn/megablast', default='megablast')
 parser.add_argument('-bd', '--BLAST_database', metavar='database', dest='bd', type=str,
 			help = 'BLAST database to use (optional, default=nt)', default = 'nt')
 parser.add_argument('-lb', '--local_blast', dest='lb', action='store_true', 
@@ -115,7 +117,7 @@ def local_blast ():
 
 	# Use the selected BLAST algorithm
 	if args.ba == 'blastn':
-		BLAST_handle = Popen(['blastn', '-query', args.i, '-out', temp_output, '-db', args.bd,
+		BLAST_handle = Popen(['blastn', '-query', args.i, '-out', temp_output, '-db', args.bd, '-task', args.tk,
 					'-max_target_seqs', str(args.hs), '-num_threads', str(cores), '-outfmt',
 					'6 qseqid sseqid stitle sgi sacc pident length qlen evalue bitscore staxids'],
 					stdout=PIPE, stderr=PIPE)
@@ -180,12 +182,14 @@ def parse_local_blast():
 				line += [name]
 			except:
 				line += [name]
+		elif line[-1] == 'N/A':
+			line += ['N/A']
 		else:	
 			# try to add the taxon id
 			try:
 				line += [taxon_dic[0][line[-1]]]
 			except:
-				line += ['']
+				line += ['N/A']
 
 		# send line away for filtering
 		filter_hits(line)
